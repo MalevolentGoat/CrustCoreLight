@@ -11,11 +11,12 @@ Server:
 ('createRoom', name)            initializes a room with team'name'
 ('initialize', {name, code})    initializes player object in correct team via 'code' and sends back it's position# (1-4)
                                 and an arrayObject with other players
-
 ('itemPickUp', id)
-('itemDropChute', id)
+('itemDropChute', id)           id of chute
+('itemPickChute', id)           id of chute
 ('itemDropHeater')
 ('updatePosition', pos)         format: pos.x, pos.y, pos.z
+('tempNull')
 
 Client:
 ('promote')                     promotes client to admin
@@ -24,10 +25,14 @@ Client:
 ('room', {name, position, otherPlayers})
                                 tells player the team'name' and it's 'position'
 ('gameStart')                   tells players the game starts now
-
 ('tempIncrease')
-('itemSpawn', {id, pos})       format: pos.x, pos.y, pos.z
+('itemSpawn', {id, position})       format: # between 1-8
 ('itemDelete', id)
-('itemPickUpYou', itemId)
-('itemPickUpOther', {playerId, itemId})
+('itemPickUp', playerId)
+('itemLost', playerId)
 ('updatePosition',  {playerId, pos})         format: pos.x, pos.y, pos.z
+('increaseDifficulty')
+('gameOver', rank)                    
+
+
+TODODODO: cleanup on reset

@@ -1,6 +1,7 @@
 var server = require('http').createServer();
 var io = require('socket.io')(server);
 var serverconf = require('./serverconf')
+var events = require('events');
 
 //random Code generator
 function randomInt(low, high) 
@@ -22,11 +23,14 @@ function generateRandSeq()
 
 //initialise roomlist
 var rooms = {};
+var rank;
 function Player(id, name) {
     this.id = id;
     this.name = name;
     this.pos = {x: 0, y: 0, z: 0};
     this.hasItem = false;
+    this.droppingAt = null;
+    this.pickingAt = null;
     this.alive = true;
 }
 function Room(name) {
@@ -41,18 +45,42 @@ function Room(name) {
         this.players[id] = new Player(id, name);
         this.playerCount++;
     };
-    this.AddItem = function(posX, posY, posZ) {
-        this.items[this.curItemId++] = new Item(posX, posY, posZ);
-        this.itemCount++; 
+    this.AddItem = function() {
+        this.curItemId++
+        this.items[this.curItemId] = new Item(this.curItemId);
     };
     this.RemoveItem = function(id) {
-        this.items.splice(this.items.findIndex(id), 1);
-        this.itemCount--;
+        this.items[id] = null;
     };
 }
-function Item(posX, posY, posZ) {
-    this.pos = {x: posX, y: posY, z: posZ};
+function Item(id) {
+    this.id = id;
 }
+
+var eventEmitter = new events.EventEmitter();
+
+function Loop() {
+    this.running = false;
+    this.tick = function() {
+        if(!this.running) {
+            return;
+        }
+        eventEmitter.emit('tick');
+        setTimeout(this.tick(), 1000);
+    }
+    this.start = function() {
+        if(this.running) {
+            return;
+        }
+        this.running = true;
+        this.tick();
+    }
+    this.stop = function() {
+        this.running = false;
+    }
+}
+
+var loop = new Loop();
 
 //socket logic
 io.sockets.on('connection', function(socket) {
@@ -67,7 +95,9 @@ io.sockets.on('connection', function(socket) {
     });
     
     socket.on('start', function() {
+        rank = Object.keys(rooms).length;
         socket.broadcast.emit('gameStart');
+        loop.start();
     });
     socket.on('reset', function() {
         if(socket.admin) {
@@ -107,22 +137,90 @@ io.sockets.on('connection', function(socket) {
         }
     });
     socket.on('itemPickUp', function(id) {
-        if(id in rooms[socket.rooms[1]].items && rooms[socket.rooms[1]].players[socket.id].hasItem == false) {
+        if(rooms[socket.rooms[1]].items[id] != null && rooms[socket.rooms[1]].players[socket.id].hasItem == false) {
             rooms[socket.rooms[1]].RemoveItem(id);
             rooms[socket.rooms[1]].players[socket.id].hasItem = true;
-            socket.to(rooms[socket.rooms[1]]).emit('itemPickUpOther', {playerId: socket.id, itemId: id});
-            socket.emit('itemPickUpYou', id);
+            io.in(socket.rooms[1]).emit('itemDelete', id);
+            io.in(socket.rooms[1]).emit('itemPickUp', socket.id);
         }
     });
     socket.on('itemDropChute', function(id) {
-
+        if(rooms[socket.rooms[1]].players[socket.id].hasItem == true) {
+            Object.keys(rooms[socket.rooms[1]].players).forEach(key => {
+                if(rooms[socket.rooms[1]].players[key].pickingAt == id) {
+                    rooms[socket.rooms[1]].players[socket.id].hasItem = false;
+                    rooms[socket.rooms[1]].players[key].hasItem = true;
+                    io.in(socket.rooms[1]).emit('itemLost', socket.id);
+                    io.in(socket.rooms[1]).emit('itemPickUp', key);
+                } else { rooms[socket.rooms[1]].players[socket.id].droppingAt = id; }
+            });
+        }
+    });
+    socket.on('itemPickChute', function(id) {
+        if(rooms[socket.rooms[1]].players[socket.id].hasItem == false) {
+            Object.keys(rooms[socket.rooms[1]].players).forEach(key => {
+                if(rooms[socket.rooms[1]].players[key].droppingAt == id) {
+                    rooms[socket.rooms[1]].players[key].droppingAt = null;
+                    rooms[socket.rooms[1]].players[key].hasItem = false;
+                    rooms[socket.rooms[1]].players[socket.id].hasItem = true;
+                    io.in(socket.rooms[1]).emit('itemLost', key);
+                    io.in(socket.rooms[1]).emit('itemPickUp', socket.id);
+                } else { rooms[socket.rooms[1]].players[socket.id].pickingAt = id; }
+            });
+        }
     });
     socket.on('itemDropHeater', function() {
-
+        if(rooms[socket.rooms[1]].players[socket.id].hasItem == true) {
+            rooms[socket.rooms[1]].players[socket.id].hasItem = false;
+            io.in(socket.rooms[1]).emit('tempIncrease');
+            io.in(socket.rooms[1]).emit('itemLost', socket.id);
+            Object.keys(rooms[socket.rooms[1]].players).forEach(key => {
+                rooms[socket.rooms[1]].player[key].alive = true;
+            });
+        }
     });
-    socket.on('updatePosition', function(pos) {
-
+    socket.on('updatePosition', function(data) {
+        rooms[socket.rooms[1]].players[socket.id].pos.x = data.x;
+        rooms[socket.rooms[1]].players[socket.id].pos.y = data.y;
+        rooms[socket.rooms[1]].players[socket.id].pos.z = data.z;
+        socket.emit('updatePosition', {playerId: socket.id, pos: rooms[socket.rooms[1]].players[socket.id].pos});
     });
+    socket.on('tempNull', function() {
+        rooms[socket.rooms[1]].players[socket.id].alive = false;
+        var deadPlayers = 0;
+        Object.keys(rooms[socket.rooms[1]].players).forEach(key => {
+            if(rooms[socket.rooms[1]].player[key].alive == false) {
+                deadPlayers++;
+            }
+        });
+        if(deadPlayers >= 4) {
+            rooms[socket.rooms[1]].alive = false;
+            io.in(socket.rooms[1]).emit('gameOver', rank);
+            rank--;
+        }
+    });
+});
+
+var itemSpawn = 0;
+var increaseDifficulty = 0;
+eventEmitter.on('tick', function() {
+    itemSpawn++;
+    increaseDifficulty++;
+    if(itemSpawn > 5) {
+        itemSpawn = 0;
+        var itemId;
+        Object.keys(rooms).forEach(key => {
+            if(rooms[key].alive) {
+                rooms[key].AddItem();
+                itemId = rooms[key].curItemId;
+            }
+        });
+        io.emit('itemSpawn', {id: rooms[key].curItemId, position: randomInt(1, 9)});
+    }
+    if(increaseDifficulty > 20) {
+        increaseDifficulty = 0;
+        io.emit('increaseDifficulty');
+    }
 });
 
 //server
