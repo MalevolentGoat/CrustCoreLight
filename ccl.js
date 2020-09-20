@@ -23,7 +23,7 @@ function generateRandSeq()
 
 //initialise roomlist
 var rooms = {};
-var rank;
+var rank = 0;
 function Player(id, name) {
     this.id = id;
     this.name = name;
@@ -102,12 +102,15 @@ io.sockets.on('connection', function(socket) {
     socket.on('reset', function() {
         if(socket.admin) {
             rooms = {};
+            rank = 0;
+            loop = new Loop();
+            itemSpawn = 0;
+            increaseDifficulty = 0;
             Object.keys(io.sockets.sockets).forEach(key => {
                 if(Object.keys(io.sockets.sockets[key].rooms).length > 1) {
                     io.sockets.sockets[key].leave(io.sockets.sockets[key].rooms[1]);
                 }
             });
-            socket.emit('rooms', rooms);
         }
     });
     socket.on('createRoom', function(data) {
@@ -197,6 +200,7 @@ io.sockets.on('connection', function(socket) {
             rooms[socket.rooms[1]].alive = false;
             io.in(socket.rooms[1]).emit('gameOver', rank);
             rank--;
+            io.emit('planetsLeft', rank);
         }
     });
 });
@@ -215,7 +219,7 @@ eventEmitter.on('tick', function() {
                 itemId = rooms[key].curItemId;
             }
         });
-        io.emit('itemSpawn', {id: rooms[key].curItemId, position: randomInt(1, 9)});
+        io.emit('itemSpawn', {id: itemId, position: randomInt(1, 9)});
     }
     if(increaseDifficulty > 20) {
         increaseDifficulty = 0;

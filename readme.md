@@ -32,7 +32,5 @@ Client:
 ('itemLost', playerId)
 ('updatePosition',  {playerId, pos})         format: pos.x, pos.y, pos.z
 ('increaseDifficulty')
-('gameOver', rank)                    
-
-
-TODODODO: cleanup on reset
+('gameOver', rank)                  
+('planetsLeft', rank)
