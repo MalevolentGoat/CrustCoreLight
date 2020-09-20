@@ -104,7 +104,7 @@ io.sockets.on('connection', function(socket) {
         if(socket.admin) {
             rooms = {};
             rank = 0;
-            loop = new Loop();
+            loop.stop();
             itemSpawn = 0;
             increaseDifficulty = 0;
             Object.keys(io.sockets.sockets).forEach(key => {
