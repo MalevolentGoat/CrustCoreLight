@@ -61,22 +61,23 @@ var eventEmitter = new events.EventEmitter();
 
 function Loop() {
     this.running = false;
-    this.tick = function() {
-        if(!this.running) {
+    var interval;
+    function tick() {
+        if(this.running == false) {
             return;
         }
         eventEmitter.emit('tick');
-        setTimeout(this.tick(), 1000);
     }
     this.start = function() {
         if(this.running) {
             return;
         }
         this.running = true;
-        this.tick();
+        interval = setInterval(tick, 1000);
     }
     this.stop = function() {
         this.running = false;
+        clearInterval(interval);
     }
 }
 
@@ -96,7 +97,7 @@ io.sockets.on('connection', function(socket) {
     
     socket.on('start', function() {
         rank = Object.keys(rooms).length;
-        socket.broadcast.emit('gameStart');
+        io.emit('gameStart');
         loop.start();
     });
     socket.on('reset', function() {
@@ -208,6 +209,7 @@ io.sockets.on('connection', function(socket) {
 var itemSpawn = 0;
 var increaseDifficulty = 0;
 eventEmitter.on('tick', function() {
+    console.log("tick");
     itemSpawn++;
     increaseDifficulty++;
     if(itemSpawn > 5) {
